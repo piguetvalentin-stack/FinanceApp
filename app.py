@@ -148,6 +148,40 @@ with tab_add:
             label_visibility="collapsed"
         )
 
+        st.write("Qui a payé ?")
+
+        payeurs = [
+            "👨 Valentin",
+            "👩 Julia",
+            "🏠 Commun"
+        ]
+
+        payeur = st.radio(
+            "Choisis le payeur",
+            payeurs,
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+        payeur = payeur.split(" ", 1)[1]
+
+        st.write("Mode de paiement")
+
+        cartes = [
+            "💳 Crédit Mutuel",
+            "📈 Trade Republic",
+            "💵 Cash"
+        ]
+
+        carte = st.radio(
+            "Choisis le mode de paiement",
+            cartes,
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+        carte = carte.split(" ", 1)[1]
+
         description = st.text_input("Description")
 
         submitted = st.form_submit_button("Ajouter la dépense")
