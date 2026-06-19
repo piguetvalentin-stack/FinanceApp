@@ -4,12 +4,14 @@ from datetime import datetime
 
 
 def auto_backup():
+    if not os.path.exists("expenses.db"):
+        return
+
     if not os.path.exists("backups"):
         os.makedirs("backups")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    today = datetime.now().strftime("%Y-%m-%d")
+    backup_file = f"backups/expenses_backup_{today}.db"
 
-    backup_file = f"backups/expenses_backup_{timestamp}.db"
-
-    if os.path.exists("expenses.db"):
+    if not os.path.exists(backup_file):
         shutil.copy2("expenses.db", backup_file)

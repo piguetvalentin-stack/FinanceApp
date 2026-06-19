@@ -35,6 +35,7 @@ st.set_page_config(
 st.title("💰 Finance Familiale")
 
 create_database()
+auto_backup()
 
 budgets = {
     "Courses": 800,
@@ -228,6 +229,53 @@ with tab_dashboard:
         else:
             st.error(f"🚨 Budget dépassé : {budget_utilisation * 100:.1f}% utilisé")
 
+        st.subheader("🚨 Alertes budget")
+
+        alertes_budget = []
+
+        for categorie_budget, budget_max in budgets.items():
+            depense_categorie = df[
+                df["Catégorie"] == categorie_budget
+            ]["Montant (€)"].sum()
+
+            pourcentage = (
+                depense_categorie / budget_max
+                if budget_max > 0
+                else 0
+            )
+
+            alertes_budget.append({
+                "categorie": categorie_budget,
+                "depense": depense_categorie,
+                "budget": budget_max,
+                "pourcentage": pourcentage
+            })
+
+        alertes_budget = sorted(
+            alertes_budget,
+            key=lambda x: x["pourcentage"],
+            reverse=True
+        )
+
+        for alerte in alertes_budget:
+            texte = (
+                f"{alerte['categorie']} : "
+                f"{alerte['depense']:.2f} € / "
+                f"{alerte['budget']:.2f} € "
+                f"({alerte['pourcentage'] * 100:.1f}%)"
+            )
+
+            if alerte["pourcentage"] >= 1:
+                st.error(f"🔴 {texte}")
+            elif alerte["pourcentage"] >= 0.8:
+                st.warning(f"🟠 {texte}")
+            else:
+                st.success(f"🟢 {texte}")
+
+            st.progress(min(alerte["pourcentage"], 1.0))
+
+
+
         st.subheader("Dépenses par payeur")
 
         df_payeurs = df.groupby("Payeur")["Montant (€)"].sum().reset_index()
@@ -250,15 +298,7 @@ with tab_dashboard:
                 f"{row['Montant (€)']:.2f} €"
             )
 
-        st.subheader("Budget par catégorie")
-
-        for categorie_budget, budget_max in budgets.items():
-            depense_categorie = df[df["Catégorie"] == categorie_budget]["Montant (€)"].sum()
-            pourcentage = depense_categorie / budget_max
-
-            st.write(f"{categorie_budget} : {depense_categorie:.2f} € / {budget_max:.2f} €")
-            st.progress(min(pourcentage, 1.0))
-
+        
         st.subheader("📅 Total annuel par catégorie")
 
         df_year = pd.DataFrame(
