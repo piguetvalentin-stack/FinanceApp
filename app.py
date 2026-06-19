@@ -2,6 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+
+
+from io import BytesIO
+from backup import auto_backup
+from datetime import datetime
+
 from database import (
     create_database,
     add_expense,
@@ -14,6 +20,7 @@ from database import (
     update_expense,
     add_recurring_expense,
     get_recurring_expenses,
+    delete_recurring_expense,   
     add_or_update_category,
     get_categories,
     delete_category
@@ -26,6 +33,7 @@ st.set_page_config(
 )
 
 st.title("💰 Finance Familiale")
+
 create_database()
 
 budgets = {
@@ -67,6 +75,8 @@ if categories_from_db:
     budgets = {category[0]: category[1] for category in categories_from_db}
 else:
     categories_list = ["Courses", "Essence", "Restaurant", "Maison", "Loisirs", "Santé", "Autre"]
+current_month = datetime.now().strftime("%Y-%m")
+
 months = ["Tous"]
 
 if expenses:
@@ -77,7 +87,13 @@ if expenses:
         )
     )
 
-selected_month = st.selectbox("Mois à afficher", months)
+default_month_index = months.index(current_month) if current_month in months else 0
+
+selected_month = st.selectbox(
+    "Mois à afficher",
+    months,
+    index=default_month_index
+)
 
 df = pd.DataFrame(
     expenses,
@@ -105,12 +121,13 @@ df = pd.DataFrame(
 if selected_month != "Tous" and not df.empty:
     df = df[df["Date"].str.startswith(selected_month)]
 
-tab_add, tab_dashboard, tab_savings, tab_recurring, tab_settings, tab_history = st.tabs(
+tab_add, tab_dashboard, tab_savings, tab_recurring, tab_export, tab_settings, tab_history = st.tabs(
     [
         "➕ Ajouter",
         "📊 Dashboard",
         "🎯 Épargne",
         "🔁 Récurrentes",
+        "📥 Export",
         "⚙️ Paramètres",
         "📋 Historique"
     ]
@@ -125,58 +142,11 @@ with tab_add:
 
         st.write("Catégorie")
 
-        categories = [
-            "🛒 Courses",
-            "⛽ Essence",
-            "🍔 Restaurant",
-            "🏠 Maison",
-            "🎮Loisirs",
-            "🏥 Santé",
-            "📦 Autre"
-        ]
-
-        categorie = st.radio(
+        categorie = st.selectbox(
             "Choisis une catégorie",
-            categories,
-            horizontal=True,
+            categories_list,
             label_visibility="collapsed"
         )
-
-        categorie = categorie.split(" ", 1)[1]
-
-        st.write("Qui a payé ?")
-
-        payeurs = [
-            "👨 Valentin",
-            "👩 Julia",
-            "🏠 Commun"
-        ]
-
-        payeur = st.radio(
-        "Choisis le payeur",
-        payeurs,
-        horizontal=True,
-        label_visibility="collapsed"
-        )
-
-        payeur = payeur.split(" ", 1)[1]
-
-        st.write("Mode de paiement")
-
-        cartes = [
-            "💳 Crédit Mutuel",
-            "📈 Trade Republic",
-            "💵 Cash"
-        ]
-
-        carte = st.radio(
-            "Choisis le mode de paiement",
-            cartes,
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-
-        carte = carte.split(" ", 1)[1]
 
         description = st.text_input("Description")
 
@@ -201,6 +171,27 @@ with tab_dashboard:
         col1.metric("💰 Total période", f"{total_depenses:.2f} €")
         col2.metric("🧾 Nombre", nombre_depenses)
         col3.metric("📊 Moyenne", f"{moyenne_depense:.2f} €")
+
+        st.subheader("🎯 Budget mensuel global")
+
+        budget_total = sum(budgets.values())
+        budget_restant = budget_total - total_depenses
+        budget_utilisation = total_depenses / budget_total if budget_total > 0 else 0
+
+        col_budget1, col_budget2, col_budget3 = st.columns(3)
+
+        col_budget1.metric("Budget mensuel", f"{budget_total:.2f} €")
+        col_budget2.metric("Dépensé", f"{total_depenses:.2f} €")
+        col_budget3.metric("Restant", f"{budget_restant:.2f} €")
+
+        st.progress(min(budget_utilisation, 1.0))
+
+        if budget_utilisation < 0.75:
+            st.success(f"✅ Budget maîtrisé : {budget_utilisation * 100:.1f}% utilisé")
+        elif budget_utilisation < 1:
+            st.warning(f"⚠️ Attention : {budget_utilisation * 100:.1f}% du budget utilisé")
+        else:
+            st.error(f"🚨 Budget dépassé : {budget_utilisation * 100:.1f}% utilisé")
 
         st.subheader("Dépenses par payeur")
 
@@ -355,13 +346,13 @@ with tab_recurring:
 
         recurring_category = st.selectbox(
             "Catégorie",
-            [categories_list],
+            categories_list,
             key="recurring_category"
         )
 
         recurring_payer = st.selectbox(
             "Payeur",
-            ["Valentin", "Madame", "Commun"],
+            ["Valentin", "Julia", "Commun"],
             key="recurring_payer"
         )
 
@@ -404,6 +395,26 @@ with tab_recurring:
         )
 
         st.dataframe(recurring_df, use_container_width=True)
+
+        st.subheader("🗑 Supprimer une dépense récurrente")
+
+        recurring_options = {
+                f"{row['ID']} - {row['Nom']} - {row['Montant (€)']:.2f} €": row["ID"]
+                for _, row in recurring_df.iterrows()
+        }
+
+        selected_recurring_label = st.selectbox(
+            "Dépense récurrente à supprimer",
+            list(recurring_options.keys())
+        )
+
+        selected_recurring_id = recurring_options[selected_recurring_label]
+
+        if st.button("🗑 Supprimer cette dépense récurrente"):
+            delete_recurring_expense(int(selected_recurring_id))
+            st.success("✅ Dépense récurrente supprimée")
+            st.rerun()
+
         st.subheader("Générer le mois")
 
         generation_date = st.date_input(
@@ -428,6 +439,43 @@ with tab_recurring:
                 st.balloons()
     else:
         st.info("Aucune dépense récurrente pour le moment.")
+
+with tab_export:
+    st.header("📥 Export des données")
+
+    all_expenses = get_expenses()
+
+    if all_expenses:
+        export_df = pd.DataFrame(
+            all_expenses,
+            columns=[
+                "ID",
+                "Date",
+                "Catégorie",
+                "Montant (€)",
+                "Description",
+                "Payeur",
+                "Carte"
+            ]
+        )
+
+        output = BytesIO()
+
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            export_df.to_excel(writer, index=False, sheet_name="Dépenses")
+
+        st.download_button(
+            label="📥 Télécharger les dépenses en Excel",
+            data=output.getvalue(),
+            file_name="depenses_finance_familiale.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        st.dataframe(export_df, use_container_width=True)
+
+    else:
+        st.info("Aucune dépense à exporter.")
+
 
 with tab_settings:
     st.header("⚙️ Paramètres")
@@ -474,6 +522,7 @@ with tab_settings:
             add_or_update_category(category_name, category_budget)
             st.success("✅ Catégorie ajoutée")
             st.balloons()
+            st.rerun()
 
     categories_from_db = get_categories()
 
@@ -533,17 +582,26 @@ with tab_history:
             )
             
 
+            payer_options = ["Valentin", "Julia", "Commun"]
+
             edit_payer = st.selectbox(
                 "Payeur",
-                ["Valentin", "Julia", "Commun"],
-                index=["Valentin", "Julia", "Commun"].index(selected_row["Payeur"])
+                payer_options,
+                index=payer_options.index(selected_row["Payeur"])
+                if selected_row["Payeur"] in payer_options
+                else 0
             )
+
+            card_options = ["Crédit Mutuel", "Trade Republic", "Cash"]
 
             edit_card = st.selectbox(
                 "Carte",
-                ["Crédit Mutuel", "Trade Republic", "Cash"],
-                index=["Crédit Mutuel", "Trade Republic", "Cash"].index(selected_row["Carte"])
+                card_options,
+                index=card_options.index(selected_row["Carte"])
+                if selected_row["Carte"] in card_options
+                else 0
             )
+
 
             edit_description = st.text_input(
                 "Description",
@@ -566,15 +624,9 @@ with tab_history:
                 st.success("✅ Dépense modifiée")
                 st.rerun()
 
-        st.subheader("Supprimer une dépense")
+        st.subheader("🗑 Supprimer la dépense sélectionnée")
 
-        expense_id_to_delete = st.number_input(
-            "ID de la dépense à supprimer",
-            min_value=1,
-            step=1
-        )
-
-        if st.button("Supprimer"):
-            delete_expense(expense_id_to_delete)
+        if st.button("🗑 Supprimer cette dépense"):
+            delete_expense(int(selected_expense_id))
             st.success("Dépense supprimée !")
             st.rerun()

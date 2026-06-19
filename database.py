@@ -248,3 +248,15 @@ def delete_category(name):
 
     connection.commit()
     connection.close()
+
+def delete_recurring_expense(recurring_id):
+    connection = sqlite3.connect("expenses.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        DELETE FROM recurring_expenses
+        WHERE id = ?
+    """, (recurring_id,))
+
+    connection.commit()
+    connection.close()
