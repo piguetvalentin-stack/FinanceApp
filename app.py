@@ -190,6 +190,7 @@ with tab_add:
             add_expense(str(date), montant, categorie, description, payeur, carte)
             st.success("Dépense enregistrée !")
             st.balloons()
+            st.rerun()
 
 with tab_dashboard:
     st.header("Dashboard")
