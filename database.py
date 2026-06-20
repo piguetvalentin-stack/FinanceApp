@@ -41,6 +41,13 @@ def create_database():
             budget REAL NOT NULL
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_budgets (
+            month TEXT PRIMARY KEY,
+            amount REAL NOT NULL
+        )
+    """)
     connection.commit()
     connection.close()
 
@@ -257,6 +264,64 @@ def delete_recurring_expense(recurring_id):
         DELETE FROM recurring_expenses
         WHERE id = ?
     """, (recurring_id,))
+
+    connection.commit()
+    connection.close()
+
+def set_monthly_budget(month, amount):
+    connection = sqlite3.connect("expenses.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO monthly_budgets
+        (month, amount)
+        VALUES (?, ?)
+    """, (month, amount))
+
+    connection.commit()
+    connection.close()
+
+def get_monthly_budget(month):
+    connection = sqlite3.connect("expenses.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT amount
+        FROM monthly_budgets
+        WHERE month = ?
+    """, (month,))
+
+    result = cursor.fetchone()
+
+    connection.close()
+
+    if result:
+        return result[0]
+
+    return None
+
+def update_recurring_expense(recurring_id, name, amount, category, description, payer, card):
+    connection = sqlite3.connect("expenses.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        UPDATE recurring_expenses
+        SET name = ?,
+            amount = ?,
+            category = ?,
+            description = ?,
+            payer = ?,
+            card = ?
+        WHERE id = ?
+    """, (
+        name,
+        amount,
+        category,
+        description,
+        payer,
+        card,
+        recurring_id
+    ))
 
     connection.commit()
     connection.close()

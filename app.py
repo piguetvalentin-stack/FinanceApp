@@ -23,7 +23,10 @@ from database import (
     delete_recurring_expense,   
     add_or_update_category,
     get_categories,
-    delete_category
+    delete_category,
+    set_monthly_budget,
+    get_monthly_budget,
+    update_recurring_expense,
 )
 
 st.set_page_config(
@@ -210,13 +213,19 @@ with tab_dashboard:
 
         st.subheader("🎯 Budget mensuel global")
 
-        budget_total = sum(budgets.values())
+        monthly_budget = get_monthly_budget(selected_month)
+
+        if monthly_budget is not None:
+            budget_total = monthly_budget
+        else:
+            budget_total = sum(budgets.values())
+
         budget_restant = budget_total - total_depenses
         budget_utilisation = total_depenses / budget_total if budget_total > 0 else 0
 
         col_budget1, col_budget2, col_budget3 = st.columns(3)
 
-        col_budget1.metric("Budget mensuel", f"{budget_total:.2f} €")
+        col_budget1.metric("Budget du mois", f"{budget_total:.2f} €")
         col_budget2.metric("Dépensé", f"{total_depenses:.2f} €")
         col_budget3.metric("Restant", f"{budget_restant:.2f} €")
 
@@ -470,6 +479,125 @@ with tab_recurring:
         )
 
         st.dataframe(recurring_df, use_container_width=True)
+        st.subheader("➕ Ajouter une récurrente au mois")
+
+        recurring_options_add = {
+            f"{row['ID']} - {row['Nom']} - {row['Montant (€)']:.2f} €": row["ID"]
+            for _, row in recurring_df.iterrows()
+        }
+
+        selected_recurring_add_label = st.selectbox(
+            "Dépense récurrente à ajouter",
+            list(recurring_options_add.keys()),
+            key="selected_recurring_add"
+        )
+
+        selected_recurring_add_id = recurring_options_add[selected_recurring_add_label]
+
+        selected_recurring_row = recurring_df[
+            recurring_df["ID"] == selected_recurring_add_id
+        ].iloc[0]
+
+        add_recurring_date = st.date_input(
+            "Date d'ajout",
+            key="add_recurring_date"
+        )
+
+        if st.button("➕ Ajouter cette dépense au mois"):
+            add_expense(
+                str(add_recurring_date),
+                float(selected_recurring_row["Montant (€)"]),
+                selected_recurring_row["Catégorie"],
+                selected_recurring_row["Description"],
+                selected_recurring_row["Payeur"],
+                selected_recurring_row["Carte"]
+            )
+
+            st.success("✅ Dépense récurrente ajoutée aux dépenses")
+            st.rerun()
+
+            st.subheader("✏️ Modifier une dépense récurrente")
+
+        recurring_options_edit = {
+            f"{row['ID']} - {row['Nom']} - {row['Montant (€)']:.2f} €": row["ID"]
+            for _, row in recurring_df.iterrows()
+        }
+
+        selected_recurring_edit_label = st.selectbox(
+            "Dépense récurrente à modifier",
+            list(recurring_options_edit.keys()),
+            key="selected_recurring_edit"
+        )
+
+        selected_recurring_edit_id = recurring_options_edit[selected_recurring_edit_label]
+
+        selected_recurring_edit_row = recurring_df[
+            recurring_df["ID"] == selected_recurring_edit_id
+        ].iloc[0]
+
+        with st.form(f"form_modifier_recurrente_{selected_recurring_edit_id}"):
+            edit_recurring_name = st.text_input(
+                "Nom",
+                value=selected_recurring_edit_row["Nom"],
+                key=f"edit_recurring_name_{selected_recurring_edit_id}"
+            )
+
+            edit_recurring_amount = st.number_input(
+                "Montant (€)",
+                min_value=0.0,
+                step=0.01,
+                value=float(selected_recurring_edit_row["Montant (€)"]),
+                key=f"edit_recurring_amount_{selected_recurring_edit_id}"
+            )
+
+            edit_recurring_category = st.selectbox(
+                "Catégorie",
+                categories_list,
+                index=categories_list.index(selected_recurring_edit_row["Catégorie"])
+                if selected_recurring_edit_row["Catégorie"] in categories_list
+                else 0,
+                key=f"edit_recurring_category_{selected_recurring_edit_id}"
+            )
+
+            edit_recurring_payer = st.selectbox(
+                "Payeur",
+                ["Valentin", "Julia", "Commun"],
+                index=["Valentin", "Julia", "Commun"].index(selected_recurring_edit_row["Payeur"])
+                if selected_recurring_edit_row["Payeur"] in ["Valentin", "Julia", "Commun"]
+                else 0,
+                key=f"edit_recurring_payer_{selected_recurring_edit_id}"
+            )
+
+            edit_recurring_card = st.selectbox(
+                "Carte",
+                ["Crédit Mutuel", "Trade Republic", "Cash"],
+                index=["Crédit Mutuel", "Trade Republic", "Cash"].index(selected_recurring_edit_row["Carte"])
+                if selected_recurring_edit_row["Carte"] in ["Crédit Mutuel", "Trade Republic", "Cash"]
+                else 0,
+                key=f"edit_recurring_card_{selected_recurring_edit_id}"
+            )
+
+            edit_recurring_description = st.text_input(
+                "Description",
+                value=selected_recurring_edit_row["Description"],
+                key=f"edit_recurring_description_{selected_recurring_edit_id}"
+            )
+
+            submitted_recurring_edit = st.form_submit_button("💾 Modifier la récurrente")
+
+            if submitted_recurring_edit:
+                update_recurring_expense(
+                    int(selected_recurring_edit_id),
+                    edit_recurring_name,
+                    edit_recurring_amount,
+                    edit_recurring_category,
+                    edit_recurring_description,
+                    edit_recurring_payer,
+                    edit_recurring_card
+                )
+
+                st.success("✅ Dépense récurrente modifiée")
+                st.rerun()
 
         st.subheader("🗑 Supprimer une dépense récurrente")
 
@@ -554,6 +682,31 @@ with tab_export:
 
 with tab_settings:
     st.header("⚙️ Paramètres")
+
+    st.subheader("💰 Budget mensuel global")
+
+    selected_budget_month = st.selectbox(
+        "Mois du budget",
+        months,
+        index=months.index(selected_month) if selected_month in months else 0,
+        key="budget_month_selector"
+    )
+
+    current_budget = get_monthly_budget(selected_budget_month)
+
+    monthly_budget_amount = st.number_input(
+        "Budget global du mois (€)",
+        min_value=0.0,
+        step=100.0,
+        value=float(current_budget) if current_budget else 0.0
+    )
+
+    if st.button("💾 Enregistrer le budget mensuel"):
+        set_monthly_budget(selected_budget_month, monthly_budget_amount)
+        st.success("✅ Budget mensuel enregistré")
+        st.rerun()
+
+    st.divider()
 
     categories_from_db = get_categories()
 
